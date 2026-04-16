@@ -1,3 +1,8 @@
+//USAGE:
+// pio run //builds the project
+//pio run -t uploadfs //uploads filesystem to esp32                                              
+//pio run -t upload //uploads firmware to esp32
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
