@@ -17,8 +17,6 @@
 #include "esp_rom_sys.h"
 #include <string.h>
 
-static const char *TAG = "main";
-
 #define UART_NUM UART_NUM_0
 #define UART_BUF 256
 
@@ -39,6 +37,11 @@ static const char *TAG = "main";
 #define PIN_NUM_MOSI  GPIO_NUM_23
 #define PIN_NUM_CLK   GPIO_NUM_18
 #define PIN_NUM_CS    GPIO_NUM_5
+
+static const char *TAG = "main";
+static bool ldo_on = false;
+static bool laser_on = false;
+static bool fan_on = true;
 
 static QueueHandle_t uart_event_queue;
 static QueueHandle_t servo_queue;
@@ -86,7 +89,7 @@ static void spiffs_init(void) {
         .base_path              = "/spiffs",
         .partition_label        = NULL,
         .max_files              = 5,
-        .format_if_mount_failed = true,
+        .format_if_mount_failed = false,
     };
     ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
     ESP_LOGI(TAG, "SPIFFS mounted");
@@ -97,6 +100,24 @@ static void spiffs_init(void) {
     } else {
         ESP_LOGI(TAG, "audio.wav NOT found");
     }
+}
+
+static void i2s_init(void)
+{
+    i2s_config_t i2s_cfg = {
+        .mode                 = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
+        .sample_rate          = 44100, //default sample rate
+        .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT,
+        .communication_format = I2S_COMM_FORMAT_STAND_MSB,
+        .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count        = 8,
+        .dma_buf_len          = 1024,
+        .use_apll             = false,
+        .tx_desc_auto_clear   = true,
+    };
+    i2s_driver_install(I2S_NUM, &i2s_cfg, 0, NULL);
+    i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
 }
 
 static void servo_init(void)
@@ -120,6 +141,37 @@ static void servo_init(void)
         .hpoint = 0
     };
     ledc_channel_config(&channel);
+}
+
+static void gpio_init(void)
+{
+    gpio_config_t io_cfg = {
+        .pin_bit_mask = ((1ULL << FAN_ENABLE) | (1ULL << LASER_ENABLE) | (1ULL << LASER_LDO_ENABLE)),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+
+    gpio_set_level(FAN_ENABLE, 1); // Start with fan on
+    gpio_set_level(LASER_LDO_ENABLE, 0); //Laser modulation disabled
+    gpio_set_level(LASER_ENABLE, 0); // Laser disabled
+    gpio_config(&io_cfg); 
+}
+
+static void uart_init(void)
+{
+    uart_config_t cfg = {
+        .baud_rate  = 115200,
+        .data_bits  = UART_DATA_8_BITS,
+        .parity     = UART_PARITY_DISABLE,
+        .stop_bits  = UART_STOP_BITS_1,
+        .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE
+    };
+
+    uart_driver_install(UART_NUM, UART_BUF * 2, 0, 10, &uart_event_queue, 0);
+    uart_param_config(UART_NUM, &cfg);
+    uart_set_pin(UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 
 static void digipot_init(void)
@@ -208,30 +260,15 @@ static void audio_task(void *arg) {
                 continue;
             }
 
-            i2s_config_t i2s_cfg = {
-                .mode                 = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
-                .sample_rate          = hdr.sample_rate,
-                .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-                .channel_format       = I2S_CHANNEL_FMT_ONLY_RIGHT,
-                .communication_format = I2S_COMM_FORMAT_STAND_MSB,
-                .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
-                .dma_buf_count        = 8,
-                .dma_buf_len          = 1024,
-                .use_apll             = false,
-                .tx_desc_auto_clear   = true,
-            };
-            i2s_driver_install(I2S_NUM, &i2s_cfg, 0, NULL);
-            i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
-
-            // i2s_set_clk(I2S_NUM,
-            // hdr.sample_rate,
-            // I2S_BITS_PER_SAMPLE_16BIT,
-            // I2S_CHANNEL_MONO);
+            i2s_set_clk(I2S_NUM,
+            hdr.sample_rate,
+            I2S_BITS_PER_SAMPLE_16BIT,
+            I2S_CHANNEL_MONO);
 
             uart_print("Playing audio\r\n");
 
             static uint8_t  buf[READ_BUF_SIZE];
-            static uint16_t buf16[READ_BUF_SIZE];
+            static uint16_t buf16[READ_BUF_SIZE / 2];
             size_t written;
 
             while (true) {
@@ -251,11 +288,11 @@ static void audio_task(void *arg) {
                     for (int i = 0; i < n; i++) buf16[i] = (uint16_t)buf[i] << 8;
                     i2s_write(I2S_NUM, buf16, n * 2, &written, portMAX_DELAY);
                 }
+                vTaskDelay(1);
             }
 
             fclose(f);
             i2s_zero_dma_buffer(I2S_NUM);
-            i2s_driver_uninstall(I2S_NUM);
             uart_print("Audio done\r\n");
         }
     }
@@ -316,23 +353,21 @@ static void uart_rx_task(void *arg) {
                             uart_print("OK: digipot\r\nEnter digipot position (0-255): \r\n");
                             state = UART_STATE_digipot_INPUT;
                         } else if (strcmp(line, "4") == 0) {
-                            static bool ldo_on = false;
+
                             ldo_on = !ldo_on;
                             gpio_set_level(LASER_LDO_ENABLE, ldo_on ? 1 : 0);
                             if (ldo_on) uart_print("Laser Power Set Ready\r\n");
                             else uart_print("Laser Power Disabled\r\n");
                         } else if (strcmp(line, "5") == 0) {
-                            static bool laser_on = false;
                             laser_on = !laser_on;
                             gpio_set_level(LASER_ENABLE, laser_on ? 1 : 0);
                             if (laser_on) uart_print("Laser Emission Enabled\r\n");
                             else uart_print("Laser Emission Disabled\r\n");
                        } else if (strcmp(line, "9") == 0) {
-                            static bool fan_set = true;
-                            fan_set = !fan_set;
-                            gpio_set_level(FAN_ENABLE, fan_set ? 0 : 1);
-                            if (fan_set) uart_print("Fans Disabled\r\n");
-                            else uart_print("Fans Enabled\r\n");
+                            fan_on = !fan_on;
+                            gpio_set_level(FAN_ENABLE, fan_on ? 1 : 0);
+                            if (fan_on) uart_print("Fans Enabled\r\n");
+                            else uart_print("Fans Disabled\r\n");
                         }                         
                     }
                     else if (state == UART_STATE_digipot_INPUT) {
@@ -384,34 +419,17 @@ void app_main(void) {
     uart_mutex  = xSemaphoreCreateMutex();
     ESP_LOGI(TAG, "queues ok");
 
-    // UART init
-    uart_config_t cfg = {
-        .baud_rate  = 115200,
-        .data_bits  = UART_DATA_8_BITS,
-        .parity     = UART_PARITY_DISABLE,
-        .stop_bits  = UART_STOP_BITS_1,
-        .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE
-    };
+    gpio_init();
+    ESP_LOGI(TAG, "gpio ok");
 
-    gpio_config_t fan_cfg = {
-        .pin_bit_mask = ((1ULL << FAN_ENABLE) | (1ULL << LASER_ENABLE) | (1ULL << LASER_LDO_ENABLE)),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&fan_cfg); 
-    gpio_set_level(FAN_ENABLE, 0); // Start with fan on
-    gpio_set_level(LASER_LDO_ENABLE, 0); //Laser modulation disabled
-    gpio_set_level(LASER_ENABLE, 0); // Laser disabled
-
-    uart_driver_install(UART_NUM, UART_BUF * 2, 0, 10, &uart_event_queue, 0);
-    uart_param_config(UART_NUM, &cfg);
-    uart_set_pin(UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_init();
     ESP_LOGI(TAG, "uart ok");
 
     spiffs_init();
     ESP_LOGI(TAG, "spiffs ok");
+
+    i2s_init();
+    ESP_LOGI(TAG, "i2s ok");
 
     servo_init();
     ESP_LOGI(TAG, "servo ok");
