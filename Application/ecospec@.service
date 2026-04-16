@@ -1,0 +1,18 @@
+[Unit]
+Description=ECOSpec Raman Spectroscopy App
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+User=%i
+Environment=DISPLAY=:0
+Environment=GDK_BACKEND=x11
+Environment=WEBKIT_DISABLE_COMPOSITING_MODE=1
+WorkingDirectory=/home/%i/ecospec
+ExecStart=/usr/bin/python3 /home/%i/ecospec/ecospec.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

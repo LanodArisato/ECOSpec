@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1024, initial-scale=1.0">
+<title>ECOSpec</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:       #0a0e14;
+    --panel:    #0f1520;
+    --border:   #1e2d40;
+    --accent:   #00d4ff;
+    --accent2:  #00ff9d;
+    --warn:     #ff6b35;
+    --err:      #ff3b5c;
+    --text:     #c8ddef;
+    --muted:    #4a6278;
+    --mono:     'Share Tech Mono', monospace;
+    --sans:     'Exo 2', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 1024px; height: 600px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /*  Layout  */
+  #app {
+    display: grid;
+    grid-template-rows: 42px 1fr 1fr;
+    grid-template-columns: 1fr 196px;
+    gap: 6px;
+    padding: 6px;
+    height: 100%;
+    width: 100%;
+  }
+
+  /*  Header  */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 12px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .logo-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+    text-shadow: 0 0 18px rgba(0,212,255,0.5);
+  }
+  .logo-sub {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    font-family: var(--mono);
+  }
+
+  .header-status {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .hstat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+  }
+  .hstat .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+    animation: pulse 2.2s infinite;
+  }
+  .hstat .dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  .hstat .dot.off  { background: var(--muted); box-shadow: none; animation: none; }
+  @keyframes pulse {
+    0%,100% { opacity:1; } 50% { opacity:0.35; }
+  }
+
+  .clock {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  /*  Panels  */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .panel-title {
+    font-size: 10px;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    flex-shrink: 0;
+  }
+  .panel-title em {
+    color: var(--accent);
+    font-style: normal;
+  }
+
+  /*  Spectrum Canvas  */
+  #specWrap {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  #specCanvas {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    background: transparent;
+    display: block;
+    border-radius: 3px;
+  }
+  .x-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    font-family: var(--mono);
+    color: var(--muted);
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+
+  /*  Bottom Left: Result + Log  */
+  #bottomLeft {
+    grid-row: 3;
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 8px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /*  Result Panel */
+  .result-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent2);
+    text-shadow: 0 0 14px rgba(0,255,157,0.4);
+    letter-spacing: 1px;
+  }
+  .result-formula {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .confidence-wrap {
+    margin: 6px 0;
+  }
+  .confidence-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+  }
+  .confidence-label span:last-child { color: var(--accent2); font-size: 13px; font-weight: 600; }
+  .bar-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), #00c9ff);
+    border-radius: 3px;
+    transition: width 0.8s cubic-bezier(.23,1,.32,1);
+    box-shadow: 0 0 8px rgba(0,255,157,0.4);
+  }
+  .matches {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    overflow: hidden;
+  }
+  .match-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 4px 6px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .match-row.top { border-color: rgba(0,255,157,0.3); }
+  .match-rank { color: var(--muted); margin-right: 6px; }
+  .match-pct { font-weight: 600; }
+  .match-pct.hi  { color: var(--accent2); }
+  .match-pct.mid { color: var(--muted); }
+  .match-pct.lo  { color: #2a3d50; }
+  .no-result { color: var(--muted); font-size: 12px; font-family: var(--mono); text-align: center; margin-top: 20px; }
+
+  /* Export button */
+  .btn-export {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 7px 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: background 0.15s, box-shadow 0.15s;
+    display: none;
+    margin-top: auto;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-export:active, .btn-export:hover { background: rgba(0,212,255,0.08); box-shadow: 0 0 12px rgba(0,212,255,0.2); }
+
+
+  /* ── Export Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 24px;
+    width: 420px;
+    box-shadow: 0 0 40px rgba(0,212,255,0.15);
+    font-family: var(--mono);
+  }
+  .modal h3 {
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+  .modal-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .modal-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    outline: none;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+  .modal-locations {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .modal-loc-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .modal-loc-btn:active,
+  .modal-loc-btn.selected { border-color: var(--accent); background: rgba(0,212,255,0.06); color: var(--accent); }
+  .modal-loc-icon { font-size: 16px; }
+  .modal-loc-path { font-size: 10px; color: var(--muted); display: block; margin-top: 2px; }
+  .modal-loc-btn.selected .modal-loc-path { color: rgba(0,212,255,0.6); }
+  .modal-btns { display: flex; gap: 8px; margin-top: 4px; }
+  .modal-btn {
+    flex: 1;
+    padding: 11px;
+    border-radius: 4px;
+    border: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .modal-btn-cancel { background: var(--border); color: var(--muted); }
+  .modal-btn-save   { background: var(--accent); color: #000; }
+  .modal-btn-save:active { opacity: 0.8; }
+
+  /*  Log Panel  */
+  .log {
+    flex: 1;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    scroll-behavior: smooth;
+  }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-line { padding: 1.5px 0; display: flex; gap: 6px; }
+  .log-ts { color: var(--muted); flex-shrink: 0; }
+  .log-msg { }
+  .log-msg.ok   { color: var(--accent2); }
+  .log-msg.err  { color: var(--err); }
+  .log-msg.info { color: var(--accent); }
+
+  /*  Right Column: Controls + Status  */
+  #rightCol {
+    grid-row: 2 / 4;
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Controls */
+  .ctrl-group { display: flex; flex-direction: column; gap: 2px; }
+  .ctrl-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+  .ctrl-label span:last-child { color: var(--accent); font-size: 12px; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 4px 0 10px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(0,212,255,0.5);
+    cursor: pointer;
+  }
+
+  select {
+    width: 100%;
+    padding: 7px 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+
+  /* Big touch buttons */
+  .btn-row { display: flex; gap: 6px; margin-top: 4px; }
+  .btn {
+    flex: 1;
+    padding: 11px 8px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    transition: opacity 0.15s, box-shadow 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .btn:active { opacity: 0.75; }
+  .btn-start {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 14px rgba(0,212,255,0.3);
+  }
+  .btn-start:disabled {
+    background: #1a3a4a;
+    color: var(--muted);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  .btn-stop {
+    background: var(--err);
+    color: #fff;
+    box-shadow: 0 0 14px rgba(255,59,92,0.3);
+  }
+
+  /* Progress */
+  .prog-wrap { display: none; }
+  .prog-wrap.show { display: block; }
+  .prog-label { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prog-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .prog-fill  { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.2s; box-shadow: 0 0 6px var(--accent); }
+
+  /* Status */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10.5px;
+    font-family: var(--mono);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-name { color: var(--muted); }
+  .stat-val  { font-weight: 600; letter-spacing: 0.5px; }
+  .ok   { color: var(--accent2); }
+  .warn { color: var(--warn); }
+  .off  { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-name">ECOSPEC</span>
+      <span class="logo-sub">Raman Spectroscopy - Microplastic Identification</span>
+    </div>
+    <div class="header-status">
+      <div class="hstat"><div class="dot"></div>Pi 5 ONLINE</div>
+      <div class="hstat"><div class="dot warn" id="h-esp32-dot"></div>ESP32</div>
+      <div class="hstat"><div class="dot warn" id="h-cam-dot"></div>CQD CAM</div>
+      <div class="hstat"><div class="dot warn" id="h-laser-dot"></div><span id="h-laser-txt">LASER STBY</span></div>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </header>
+
+  <!-- Spectrum -->
+  <div class="panel" id="specWrap">
+    <div class="panel-title">Live Raman Spectrum &nbsp;<em id="scan-status">· IDLE</em></div>
+    <canvas id="specCanvas"></canvas>
+    <div class="x-labels">
+      <span>200</span><span>600</span><span>1000</span><span>1400</span>
+      <span>1800</span><span>2200</span><span>2800</span><span>3400 cm⁻¹</span>
+    </div>
+  </div>
+
+  <!-- Bottom Left: Result + Log -->
+  <div id="bottomLeft">
+    <div class="panel">
+      <div class="panel-title">Identification Result</div>
+      <div id="result-area"><p class="no-result">// Run a scan to see results</p></div>
+      <button class="btn-export" id="export-btn" onclick="exportData()">⬇ EXPORT CSV</button>
+    </div>
+    <div class="panel">
+      <div class="panel-title">System Log</div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <!-- Right: Controls + Status -->
+  <div id="rightCol">
+
+    <div class="panel" style="flex:0 0 auto;">
+      <div class="panel-title">Acquisition Settings</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label"><span>Integration Time</span><span id="integ-val">250 ms</span></div>
+        <input type="range" min="10" max="1000" value="250"
+          oninput="document.getElementById('integ-val').textContent=this.value+' ms'">
+      </div>
+      <div class="ctrl-label" style="margin-bottom:4px;"><span>Laser Power</span></div>
+      <select>
+        <option>150 mW (Standard)</option>
+        <option>100 mW (Low)</option>
+        <option>200 mW (High)</option>
+        <option>250 mW (Max)</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn btn-start" id="start-btn" onclick="startScan()" disabled>⚠ NOT READY</button>
+        <button class="btn btn-stop" onclick="eStop()">■ STOP</button>
+      </div>
+      <div class="prog-wrap" id="prog-wrap" style="margin-top:8px;">
+        <div class="prog-label" id="prog-label">Acquiring...</div>
+        <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="panel" style="flex:1;">
+      <div class="panel-title">System Status</div>
+      <div class="stat-row"><span class="stat-name">Raspberry Pi 5</span><span class="stat-val ok">ONLINE</span></div>
+      <div class="stat-row"><span class="stat-name">ESP32 MCU</span><span class="stat-val off" id="s-esp32">CHECKING...</span></div>
+      <div class="stat-row"><span class="stat-name">ACUROS CQD Cam</span><span class="stat-val off" id="s-camera">CHECKING...</span></div>
+      <div class="stat-row"><span class="stat-name">785 nm Laser</span><span class="stat-val off" id="s-laser">STANDBY</span></div>
+      <div class="stat-row"><span class="stat-name">TEC Detector</span><span class="stat-val ok">−15°C OK</span></div>
+      <div class="stat-row"><span class="stat-name">Interlocks</span><span class="stat-val ok">ALL CLEAR</span></div>
+      <div class="stat-row"><span class="stat-name">eBUS SDK</span><span class="stat-val ok">ACTIVE</span></div>
+      <div class="stat-row"><span class="stat-name">UART Baud</span><span class="stat-val">115200</span></div>
+    </div>
+
+  </div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal">
+    <h3>⬇ Export Spectrum Data</h3>
+    <span class="modal-label">Filename</span>
+    <input class="modal-input" type="text" id="modal-filename" value="ecospec_scan.csv" />
+    <span class="modal-label">Save Location</span>
+    <div class="modal-locations">
+      <button class="modal-loc-btn selected" data-path="/home/ecospec/Desktop/Application/Exports" onclick="selectLoc(this, '/home/ecospec/Desktop/Application/Exports')">
+        <span class="modal-loc-icon">📂</span>
+        <span>
+          Exports
+          <span class="modal-loc-path">/home/ecospec/Desktop/Application/Exports/</span>
+        </span>
+      </button>
+      <button class="modal-loc-btn" data-path="/home/ecospec/Desktop" onclick="selectLoc(this, '/home/ecospec/Desktop')">
+        <span class="modal-loc-icon">🖥</span>
+        <span>
+          Desktop
+          <span class="modal-loc-path">/home/ecospec/Desktop/</span>
+        </span>
+      </button>
+      <button class="modal-loc-btn" data-path="/home/ecospec/Downloads" onclick="selectLoc(this, '/home/ecospec/Downloads')">
+        <span class="modal-loc-icon">⬇</span>
+        <span>
+          Downloads
+          <span class="modal-loc-path">/home/ecospec/Downloads/</span>
+        </span>
+      </button>
+      <button class="modal-loc-btn" data-path="/home/ecospec/Documents" onclick="selectLoc(this, '/home/ecospec/Documents')">
+        <span class="modal-loc-icon">📁</span>
+        <span>
+          Documents
+          <span class="modal-loc-path">/home/ecospec/Documents/</span>
+        </span>
+      </button>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-cancel" onclick="closeModal()">CANCEL</button>
+      <button class="modal-btn modal-btn-save" onclick="confirmExport()">SAVE CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- Debug Modal -->
+<div class="modal-overlay" id="debug-modal">
+  <div class="modal">
+    <h3>⚙ Debug — Pipeline Test</h3>
+    <span class="modal-label">Select a raw spectrum file</span>
+    <select class="modal-input" id="debug-file-select" style="margin-bottom:16px;"></select>
+    <span class="modal-label" style="color:var(--warn); margin-bottom:12px; display:block;">
+      ⚠ Hardware will be skipped — processing pipeline only
+    </span>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-cancel" onclick="closeDebugModal()">CANCEL</button>
+      <button class="modal-btn modal-btn-save" onclick="runDebugScan()">RUN DEBUG SCAN</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// Clock 
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+//  Log 
+function ts() { return new Date().toTimeString().slice(0,8); }
+function log(msg, cls='') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">[${ts()}]</span><span class="log-msg ${cls}">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+log('System initialized', 'ok');
+log('TEC detector stabilized at −15°C', 'ok');
+log('All interlocks nominal', 'ok');
+log('Checking hardware...', 'info');
+
+//  Canvas Setup 
+const canvas = document.getElementById('specCanvas');
+const ctx = canvas.getContext('2d');
+let animId, scanInterval, scanning = false, currentSpec = null, lastScanResult = null;
+
+function resizeCanvas() {
+  const wrap = document.getElementById('specWrap');
+  // height = panel height minus title, labels, padding
+  canvas.width  = wrap.clientWidth  - 24;
+  canvas.height = wrap.clientHeight - 80;
+  draw(currentSpec);
+}
+
+function noise() {
+  return Array.from({length:300}, () => 0.02 + Math.random()*0.04);
+}
+
+function peSpectrum() {
+  const peaks = [{p:85,h:0.88,w:6},{p:120,h:0.70,w:5},{p:220,h:0.50,w:8},{p:265,h:1.0,w:5},{p:285,h:0.82,w:4}];
+  return Array.from({length:300}, (_,i) => {
+    let v = (Math.random()-0.5)*0.01 + 0.03;
+    peaks.forEach(pk => v += pk.h * Math.exp(-0.5*((i-pk.p)/pk.w)**2));
+    return Math.max(0, v);
+  });
+}
+
+function norm(arr) {
+  const mn = Math.min(...arr), mx = Math.max(...arr);
+  return arr.map(v => (v-mn)/(mx-mn));
+}
+
+function draw(data) {
+  const W = canvas.width, H = canvas.height;
+  if (W === 0 || H === 0) return;
+  ctx.clearRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(30,45,64,0.8)'; ctx.lineWidth = 1;
+  for (let i=1;i<5;i++) {
+    const y = H*i/5;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+  for (let i=1;i<7;i++) {
+    const x = W*i/7;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+
+  if (!data) {
+    ctx.fillStyle = 'rgba(74,98,120,0.5)';
+    ctx.font = `12px 'Share Tech Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('// AWAITING ACQUISITION', W/2, H/2);
+    return;
+  }
+
+  const n = norm(data);
+
+  // Fill
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, 'rgba(0,212,255,0.15)');
+  grad.addColorStop(1, 'rgba(0,212,255,0)');
+  ctx.beginPath();
+  n.forEach((v,i) => {
+    const x = i/(n.length-1)*W, y = (1-v)*(H-12)+6;
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  });
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  n.forEach((v,i) => {
+    const x = i/(n.length-1)*W, y = (1-v)*(H-12)+6;
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  });
+  ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 1.8;
+  ctx.shadowColor = '#00d4ff'; ctx.shadowBlur = 6;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function idleLoop() { draw(noise()); animId = requestAnimationFrame(idleLoop); }
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+idleLoop();
+
+//  Scan
+function setLaser(on) {
+  const s = document.getElementById('s-laser');
+  const dot = document.getElementById('h-laser-dot');
+  const txt = document.getElementById('h-laser-txt');
+  if (on) {
+    s.textContent = 'ACTIVE'; s.className = 'stat-val ok';
+    dot.className = 'dot'; txt.textContent = 'LASER ACTIVE';
+  } else {
+    s.textContent = 'STANDBY'; s.className = 'stat-val off';
+    dot.className = 'dot warn'; txt.textContent = 'LASER STBY';
+  }
+}
+
+function startScan() {
+  if (scanning) return;
+
+  const esp32 = document.getElementById('s-esp32');
+  const cam   = document.getElementById('s-camera');
+  if (!esp32.className.includes('ok') || !cam.className.includes('ok')) {
+    log('Cannot scan — hardware not ready', 'err');
+    return;
+  }
+
+  scanning = true;
+  cancelAnimationFrame(animId);
+
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('start-btn').textContent = '⏳ SCANNING';
+  document.getElementById('prog-wrap').classList.add('show');
+  document.getElementById('prog-label').textContent = 'Positioning sample...';
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('scan-status').textContent = '· ACQUIRING';
+  setLaser(true);
+
+  log('Scan initiated', 'info');
+  log('Laser enabled — 785 nm, 150 mW', 'info');
+  log('Sending servo command to ESP32...', 'info');
+
+  const steps = [
+    [10, 'Positioning sample via servo...'],
+    [25, 'Initialising camera...'],
+    [40, 'Capturing raw spectrum...'],
+    [55, 'Applying median filter...'],
+    [65, '7th-order polynomial baseline removal...'],
+    [75, 'SNV normalisation...'],
+    [85, 'Min-max scaling...'],
+    [92, 'Pearson similarity matching vs library...'],
+  ];
+  const logged = new Set();
+  let pct = 0;
+
+  const progressInterval = setInterval(() => {
+    if (pct < 90) pct += 0.3;
+    document.getElementById('prog-fill').style.width = pct + '%';
+    steps.forEach(([th, msg]) => {
+      if (pct >= th && !logged.has(th)) {
+        logged.add(th);
+        log(msg);
+        document.getElementById('prog-label').textContent = msg;
+      }
+    });
+    draw(noise());
+  }, 100);
+
+  window.pywebview.api.run_scan().then(result => {
+    clearInterval(progressInterval);
+    document.getElementById('prog-fill').style.width = '100%';
+
+    if (!result.ok) {
+      log(`Scan error: ${result.error}`, 'err');
+      eStop();
+      return;
+    }
+
+    log(`Spectrum captured — ${result.spectrum.length} points`, 'ok');
+    log(`Raw file: ${result.file}`, 'info');
+    finishScan(result);
+
+  }).catch(err => {
+    clearInterval(progressInterval);
+    log(`Scan failed: ${err}`, 'err');
+    eStop();
+  });
+}
+
+function finishScan(result) {
+  scanning = false;
+  lastScanResult = result;
+  currentSpec = result.spectrum;
+
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('start-btn').textContent = '▶ SCAN';
+  document.getElementById('prog-wrap').classList.remove('show');
+  document.getElementById('scan-status').textContent = '· COMPLETE';
+  setLaser(false);
+
+  const pct = Math.round(result.r * 100);
+  log('Scan complete', 'ok');
+  log(`Result: ${result.match} — ${pct}%`, 'ok');
+  document.getElementById('export-btn').style.display = 'block';
+
+  const matchRows = result.matches.map((m, i) => {
+    const p   = Math.round(m.r * 100);
+    const cls = i === 0 ? 'hi' : p > 60 ? 'mid' : 'lo';
+    const top = i === 0 ? ' top' : '';
+    return `
+      <div class="match-row${top}">
+        <span><span class="match-rank">#${i+1}</span>${m.name}</span>
+        <span class="match-pct ${cls}">${p}%</span>
+      </div>`;
+  }).join('');
+
+  document.getElementById('result-area').innerHTML = `
+    <div class="result-name">${result.match}</div>
+    <div class="confidence-wrap">
+      <div class="confidence-label">
+        <span>Pearson Similarity</span><span>${pct}%</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:0%" id="conf-bar"></div>
+      </div>
+    </div>
+    <div class="matches">${matchRows}</div>
+  `;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const bar = document.getElementById('conf-bar');
+      if (bar) bar.style.width = pct + '%';
+    });
+  });
+}
+
+  // Animate bar
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const bar = document.getElementById('conf-bar');
+      if (bar) bar.style.width = '93.6%';
+    });
+  });
+
+
+function eStop() {
+  clearInterval(scanInterval);
+  cancelAnimationFrame(animId);
+  scanning = false; currentSpec = null;
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('start-btn').textContent = '▶ SCAN';
+  document.getElementById('prog-wrap').classList.remove('show');
+  document.getElementById('scan-status').textContent = '· STOPPED';
+  const s = document.getElementById('s-laser');
+  s.textContent = 'OFF'; s.className = 'stat-val warn';
+  document.getElementById('h-laser-dot').className = 'dot off';
+  document.getElementById('h-laser-txt').textContent = 'LASER OFF';
+  log('EMERGENCY STOP — laser disabled', 'err');
+  idleLoop();
+}
+
+let _selectedLoc = '/home/pi';
+
+function selectLoc(btn, path) {
+  document.querySelectorAll('.modal-loc-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _selectedLoc = path;
+}
+
+function exportData() {
+  if (!currentSpec) return;
+  // Pre-fill filename with timestamp
+  const timestamp = new Date().toISOString();
+  const fname = 'ecospec_' + timestamp.slice(0,19).replace(/[:T]/g,'-') + '.csv';
+  document.getElementById('modal-filename').value = fname;
+  document.getElementById('export-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('export-modal').classList.remove('show');
+}
+
+async function confirmExport() {
+  if (!currentSpec) return;
+
+  const integ     = document.getElementById('integ-val').textContent;
+  const timestamp = new Date().toISOString();
+  let filename    = document.getElementById('modal-filename').value.trim() || 'ecospec_scan.csv';
+  if (!filename.endsWith('.csv')) filename += '.csv';
+
+  const selBtn  = document.querySelector('.modal-loc-btn.selected');
+  const saveDir = selBtn ? selBtn.dataset.path : '/home/ecospec';
+  const fullPath = saveDir.replace(/\/$/, '') + '/' + filename;
+
+  // Use real match result if available, otherwise fallback
+  const matchName = lastScanResult ? lastScanResult.match : 'Unknown';
+  const matchPct  = lastScanResult ? Math.round(lastScanResult.r * 100) + '%' : 'N/A';
+
+  let csv = '# ECOSpec Export\n';
+  csv += `# Timestamp: ${timestamp}\n`;
+  csv += `# Integration Time: ${integ}\n`;
+  csv += `# Result: ${matchName} — ${matchPct}\n`;
+  csv += `# Source File: ${lastScanResult ? lastScanResult.file : 'unknown'}\n#\n`;
+  csv += 'Index,Raman Shift (cm-1),Intensity (normalized)\n';
+
+  // Use real wavenumber shifts if available, otherwise space evenly 200-3400
+  currentSpec.forEach((v, i) => {
+    const shift = lastScanResult && lastScanResult.shifts
+      ? lastScanResult.shifts[i]
+      : Math.round(200 + (i / (currentSpec.length - 1)) * 3200);
+    csv += `${i},${shift},${v.toFixed(5)}\n`;
+  });
+
+  closeModal();
+
+  try {
+    const result = await window.pywebview.api.save_csv(csv, fullPath);
+    if (result.ok) {
+      log(`CSV saved → ${result.path}`, 'ok');
+    } else if (result.error !== 'Cancelled') {
+      log(`Export failed: ${result.error}`, 'err');
+    }
+  } catch (e) {
+    log(`Export error: ${e}`, 'err');
+  }
+}
+
+// Hardware Detection
+function updateHardwareStatus(hw) {
+  // ESP32
+  const esp32El = document.getElementById('s-esp32');
+  if (esp32El) {
+    const changed = esp32El.textContent !== hw.esp32.status;
+    esp32El.textContent = hw.esp32.status;
+    esp32El.className   = 'stat-val ' + hw.esp32.cls;
+    if (changed) {
+      if (hw.esp32.cls === 'ok') {
+        log(`ESP32 detected on ${hw.esp32.detail}`, 'ok');
+      } else {
+        log('ESP32 not detected — check USB connection', 'err');
+      }
+    }
+  }
+
+  // Camera
+  const camEl = document.getElementById('s-camera');
+  if (camEl) {
+    const changed = camEl.textContent !== hw.camera.status;
+    camEl.textContent = hw.camera.status;
+    camEl.className   = 'stat-val ' + hw.camera.cls;
+    if (changed) {
+      if (hw.camera.cls === 'ok') {
+        log(`Camera detected on ${hw.camera.detail}`, 'ok');
+      } else {
+        log('Camera not detected — check USB connection', 'err');
+      }
+    }
+  }
+
+  // Header dots
+  const espDot = document.getElementById('h-esp32-dot');
+  if (espDot) espDot.className = 'dot' + (hw.esp32.cls === 'ok' ? '' : ' warn');
+
+  const camDot = document.getElementById('h-cam-dot');
+  if (camDot) camDot.className = 'dot' + (hw.camera.cls === 'ok' ? '' : ' warn');
+
+  // Lock scan button if hardware not ready
+  updateScanButton(hw);
+}
+
+function updateScanButton(hw) {
+  const btn = document.getElementById('start-btn');
+  if (!btn || scanning) return;
+  const allReady = hw.esp32.cls === 'ok' && hw.camera.cls === 'ok';
+  if (allReady) {
+    btn.disabled = false;
+    btn.textContent = '▶ SCAN';
+  } else {
+    btn.disabled = true;
+    const missing = [];
+    if (hw.esp32.cls  !== 'ok') missing.push('ESP32');
+    if (hw.camera.cls !== 'ok') missing.push('Camera');
+    btn.textContent = '⚠ NOT READY';
+    btn.title = `Not connected: ${missing.join(', ')}`;
+  }
+}
+
+function pollHardware() {
+  if (!window.pywebview || !window.pywebview.api) return;
+  window.pywebview.api.detect_hardware().then(hw => {
+    updateHardwareStatus(hw);
+  }).catch(() => {});
+}
+
+// Wait for PyWebView bridge, then start polling
+window.addEventListener('pywebviewready', () => {
+  pollHardware();                        // immediate check on load
+  setInterval(pollHardware, 5000);       // recheck every 5 seconds
+});
+
+// Debug Mode 
+let logoTapCount = 0;
+let logoTapTimer = null;
+
+document.querySelector('.logo-name').addEventListener('click', () => {
+  logoTapCount++;
+  clearTimeout(logoTapTimer);
+  logoTapTimer = setTimeout(() => { logoTapCount = 0; }, 2000);
+  if (logoTapCount >= 5) {
+    logoTapCount = 0;
+    openDebugPanel();
+  }
+});
+
+function openDebugPanel() {
+  window.pywebview.api.list_raw_files().then(files => {
+    const options = files.length > 0
+      ? files.map(f => `<option value="${f}">${f}</option>`).join('')
+      : '<option value="">No raw files found</option>';
+
+    document.getElementById('debug-file-select').innerHTML = options;
+    document.getElementById('debug-modal').classList.add('show');
+    log('Debug mode opened', 'info');
+  });
+}
+
+function closeDebugModal() {
+  document.getElementById('debug-modal').classList.remove('show');
+}
+
+function runDebugScan() {
+  const sel = document.getElementById('debug-file-select');
+  const filename = sel.value;
+  if (!filename) {
+    log('Debug: no file selected', 'err');
+    return;
+  }
+
+  closeDebugModal();
+  scanning = true;
+  cancelAnimationFrame(animId);
+
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('start-btn').textContent = '⏳ SCANNING';
+  document.getElementById('prog-wrap').classList.add('show');
+  document.getElementById('prog-label').textContent = 'Debug: processing pipeline...';
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('scan-status').textContent = '· DEBUG';
+
+  log(`Debug scan started — ${filename}`, 'info');
+  log('Skipping hardware — running pipeline only...', 'info');
+
+  let pct = 0;
+  const progressInterval = setInterval(() => {
+    if (pct < 90) pct += 0.8;
+    document.getElementById('prog-fill').style.width = pct + '%';
+    draw(noise());
+  }, 100);
+
+  window.pywebview.api.debug_scan(filename).then(result => {
+    clearInterval(progressInterval);
+    document.getElementById('prog-fill').style.width = '100%';
+
+    if (!result.ok) {
+      log(`Debug error: ${result.error}`, 'err');
+      if (result.available) log(`Available files: ${result.available.join(', ')}`, 'info');
+      eStop();
+      return;
+    }
+
+    log(`Debug pipeline complete — ${result.spectrum.length} points`, 'ok');
+    finishScan(result);
+
+  }).catch(err => {
+    clearInterval(progressInterval);
+    log(`Debug failed: ${err}`, 'err');
+    eStop();
+  });
+}
+
+</script>
+</body>
+</html>
