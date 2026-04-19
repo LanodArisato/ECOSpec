@@ -176,7 +176,7 @@ def main():
         height=600,
         resizable=False,
         fullscreen=False,
-        frameless=False,
+        frameless=True,
         min_size=(1024, 600),
         background_color='#0a0e14',
         text_select=False,
