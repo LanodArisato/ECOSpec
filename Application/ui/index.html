@@ -1275,14 +1275,14 @@ async function sendDigipot() {
 
 // ── Laser Power Level ─────────────────────────────────────
 async function setPowerLevel() {
-  if (!apiReady || !window.pywebview || !window.pywebview.api) {
-    log('Cannot set power — waiting for PyWebView bridge', 'err');
+  const pct = parseInt(document.getElementById('power-slider').value);
+  const digipotValue = Math.round(pct / 100 * 255);
+  log(`Laser power set to ${pct}% (digipot: ${digipotValue})`, 'info');
+
+  if (!window.pywebview || !window.pywebview.api) {
+    log('ESP32 not connected — power level saved locally only', 'warn');
     return;
   }
-  const pct = parseInt(document.getElementById('power-slider').value);
-  // Map 0-100% to 0-255 for digipot
-  const digipotValue = Math.round(pct / 100 * 255);
-  log(`Setting laser power to ${pct}% (digipot: ${digipotValue})`, 'info');
   try {
     const selectResult = await window.pywebview.api.send_esp_command(3);
     if (!selectResult.ok) {
@@ -1291,7 +1291,7 @@ async function setPowerLevel() {
     }
     const valueResult = await window.pywebview.api.send_esp_command(digipotValue);
     if (valueResult.ok) {
-      log(`Laser power set to ${pct}%`, 'ok');
+      log(`ESP32 confirmed power at ${pct}%`, 'ok');
       document.getElementById('esp-response').textContent = `✓ Power set to ${pct}%`;
       document.getElementById('esp-response').style.color = 'var(--accent2)';
     } else {
