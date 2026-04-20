@@ -25,6 +25,7 @@ class EcoSpecAPI:
 
     def __init__(self):
         self._window = None
+        self.esp = espComms('/dev/ttyUSB0')
 
     def set_window(self, window):
         self._window = window
@@ -33,7 +34,7 @@ class EcoSpecAPI:
     def detect_hardware(self):
         result = {}
 
-        esp32_ports = ['/dev/ttyS0'] + glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*')
+        esp32_ports = ['/dev/ttyUSB0']
         found_port  = next((p for p in esp32_ports if os.path.exists(p)), None)
         if found_port:
             result['esp32'] = {'status': 'ONLINE', 'cls': 'ok', 'detail': found_port}
@@ -62,11 +63,9 @@ class EcoSpecAPI:
         1=servos, 2=audio, 3=digipot, 4=laser LDO, 5=ext laser, 9=fans
         """
         try:
-            esp = espComms('/dev/ttyS0')
-            if not esp.ser:
-                return {'ok': False, 'error': 'Could not open serial port /dev/ttyS0'}
-            esp.send_servo_command(value)
-            esp.close()
+            if not self.esp.ser:
+                return {'ok': False, 'error': 'Could not open serial port /dev/ttyUSB0'}
+            self.esp.send_command(value)
             return {'ok': True, 'response': f'Command {value} sent to ESP32'}
         except Exception as e:
             return {'ok': False, 'error': str(e)}
@@ -74,11 +73,9 @@ class EcoSpecAPI:
     # ── Full Scan Pipeline ────────────────────────────────────────
     def run_scan(self):
         try:
-            esp = espComms('/dev/ttyS0')
-            if esp.ser is None:
+            if self.esp.ser is None:
                 return {'ok': False, 'error': 'ESP32 connection error'}
-            esp.send_servo_command(1)
-            esp.close()
+            self.esp.send_command(1)
 
             cam = Camera()
             cam.init()

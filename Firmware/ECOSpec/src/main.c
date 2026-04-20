@@ -417,7 +417,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "servo ok");
 
     digipot_init();
-    digipot_set_position(255);
+    digipot_set_position(0);
     ESP_LOGI(TAG, "digipot ok");
 
     xTaskCreate(uart_rx_task, "uart_rx", 4096,  NULL, 10, NULL);
