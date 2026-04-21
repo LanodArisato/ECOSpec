@@ -899,6 +899,8 @@ function finishScan(result) {
   scanning = false;
   lastScanResult = result;
   currentSpec = result.spectrum;
+  cancelAnimationFrame(animId);
+  draw(currentSpec);
 
   document.getElementById('start-btn').disabled = false;
   document.getElementById('start-btn').textContent = '▶ SCAN';
