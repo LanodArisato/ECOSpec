@@ -1,4 +1,5 @@
 from harvesters.core import Harvester
+import numpy as np
 import time
 
 class Camera:
@@ -38,10 +39,20 @@ class Camera:
 
         with self.ia.fetch() as buffer:
             component = buffer.payload.components[0]
-            print(f"  Image Width:  {component.width}")
-            print(f"  Image Height: {component.height}")
+            data = component.data
+            width = component.width
+            height = component.height
+
+            print(f"  Image Width:  {width}")
+            print(f"  Image Height: {height}")
             print(f"  Pixel Format: {component.data_format}")
+
+            img = np.array(data).reshape((height, width))
+
+            np.savetxt("image.csv", img, delimiter=",", fmt="%d")
+
             print("  Image fetch successful!")
+
 
         self.ia.stop()
 

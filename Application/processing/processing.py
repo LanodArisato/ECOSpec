@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 RAW_DIR = Path(__file__).parent / "spectra/raw"
 PROCESSED_DIR = Path(__file__).parent / "spectra/processed"
 LIB_DIR = Path(__file__).parent / "spectra/lib"
+DARK_FILE = Path(__file__).parent / "spectra/lib" / "dark.csv"
 
 def process_spectrum(filename, log_callback=print):
     """
@@ -26,16 +27,38 @@ def process_spectrum(filename, log_callback=print):
 
     # --- Load raw spectrum ---
     df = pd.read_csv(RAW_DIR / filename, header=None, names=["WAVE", "INTENSITY"])
-    df = df[df["INTENSITY"] > 0]
-    df["INTENSITY"] = df["INTENSITY"].round()
-    df["WAVE"] = df["WAVE"].round()
+
+    # ---Cleanup ---
+    df = df.dropna()
     df = df[(df["WAVE"] >= 200) & (df["WAVE"] <= 3400)]
 
     # --- Interpolation ---
     x = np.arange(200, 3401, 1)
-    y_interp = np.interp(x, df["WAVE"], df["INTENSITY"])
+    y_sample = np.interp(x, df["WAVE"], df["INTENSITY"])
 
-    df_proc = pd.DataFrame({"WAVE": x, "INTENSITY_RAW": y_interp})
+    # --- Optional dark subtraction ---
+    if DARK_FILE.exists():
+        if log_callback:
+            log_callback(f"Dark file found: {DARK_FILE.name}, applying subtraction...")
+
+        dark_df = pd.read_csv(DARK_FILE, header=None, names=["WAVE", "INTENSITY"])
+        dark_df = dark_df.dropna()
+
+
+        # Interpolate dark spectrum
+        y_dark = np.interp(x, dark_df["WAVE"], dark_df["INTENSITY"])
+
+        # Subtract
+        y_dark_corrected = y_sample - y_dark
+        y_input = np.clip(y_dark_corrected, 0, None)
+
+    else:
+        y_input = y_sample
+        if log_callback:
+            log_callback("No dark file found, skipping dark subtraction.")
+    
+
+    df_proc = pd.DataFrame({"WAVE": x, "INTENSITY_RAW": y_input})
 
     # --- Median filter ---
     df_proc["INTENSITY_MED"] = medfilt(df_proc["INTENSITY_RAW"], kernel_size=15)
