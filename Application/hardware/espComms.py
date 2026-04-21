@@ -14,8 +14,7 @@ class espComms:
             print(f"Failed to open serial port: {e}")
             self.ser = None
 
-    def send_servo_command(self, value):
-        """Send command '1' to ESP32 to initiate servo movement"""
+    def send_command(self, value):
         if not self.ser:
             print("Serial connection not available")
             return

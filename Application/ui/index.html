@@ -26,6 +26,7 @@
   html, body {
     width: 1024px; height: 600px;
     overflow: hidden;
+    position: relative;
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
@@ -457,6 +458,33 @@
     box-shadow: 0 0 14px rgba(255,59,92,0.3);
   }
 
+  .btn-esp {
+  flex: 1;
+  min-width: 44px;
+  padding: 10px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.btn-esp:hover, .btn-esp:active {
+  background: rgba(0,212,255,0.08);
+  box-shadow: 0 0 10px rgba(0,212,255,0.2);
+}
+.btn-esp:disabled {
+  color: var(--muted);
+  border-color: var(--border);
+  cursor: not-allowed;
+  box-shadow: none;
+}
   /* Progress */
   .prog-wrap { display: none; }
   .prog-wrap.show { display: block; }
@@ -533,13 +561,12 @@
         <input type="range" min="10" max="1000" value="250"
           oninput="document.getElementById('integ-val').textContent=this.value+' ms'">
       </div>
-      <div class="ctrl-label" style="margin-bottom:4px;"><span>Laser Power</span></div>
-      <select>
-        <option>150 mW (Standard)</option>
-        <option>100 mW (Low)</option>
-        <option>200 mW (High)</option>
-        <option>250 mW (Max)</option>
-      </select>
+<div class="ctrl-group">
+        <div class="ctrl-label"><span>Laser Power</span><span id="power-val">0%</span></div>
+        <input type="range" min="0" max="100" value="0" id="power-slider"
+          oninput="document.getElementById('power-val').textContent=this.value+'%'">
+      </div>
+      <button class="btn btn-start" onclick="setPowerLevel()" style="width:100%; margin-bottom:8px; padding:8px;">SET POWER LEVEL</button>
       <div class="btn-row">
         <button class="btn btn-start" id="start-btn" onclick="startScan()" disabled>⚠ NOT READY</button>
         <button class="btn btn-stop" onclick="eStop()">■ STOP</button>
@@ -562,9 +589,26 @@
       <div class="stat-row"><span class="stat-name">UART Baud</span><span class="stat-val">115200</span></div>
     </div>
 
-  </div>
+</div>
+
+<button onclick="openEsp32Modal()" style="
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 999;
+">ESP32</button>
 
 <!-- Export Modal -->
+
 <div class="modal-overlay" id="export-modal">
   <div class="modal">
     <h3>⬇ Export Spectrum Data</h3>
@@ -625,7 +669,36 @@
 </div>
 
 </div>
+<!-- ESP32 Control Modal -->
+<div class="modal-overlay" id="esp32-modal">
+  <div class="modal">
+    <h3>ESP32 Control</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px;">
+      <button class="btn-esp" style="padding:14px 8px;" onclick="sendEspCommand(1)">SERVOS</button>
+      <button class="btn-esp" style="padding:14px 8px;" onclick="sendEspCommand(2)">AUDIO</button>
+      <button class="btn-esp" style="padding:14px 8px;" onclick="sendEspCommand(4)">LASER LDO</button>
+      <button class="btn-esp" style="padding:14px 8px;" onclick="sendEspCommand(5)">EXT LASER</button>
+      <button class="btn-esp" style="padding:14px 8px;" onclick="sendEspCommand(9)">FANS</button>
+      <button class="btn-esp" style="padding:14px 8px;" onclick="toggleDigipot()">DIGIPOT</button>
+    </div>
 
+    <div id="digipot-submenu" style="display:none; margin-bottom:14px; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:10px;">
+      <div style="font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:8px; letter-spacing:1px;">DIGIPOT VALUE (0–255)</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="digipot-value" type="number" min="0" max="255" value="128"
+          style="flex:1; background:var(--panel); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:var(--mono); font-size:12px; padding:8px; outline:none;"/>
+        <button class="btn-esp" onclick="sendDigipot()" style="padding:8px 14px;">SEND</button>
+        <button class="btn-esp" onclick="toggleDigipot()" style="padding:8px 12px; color:var(--muted);">✕</button>
+      </div>
+    </div>
+
+    <div id="esp-response" style="font-family:var(--mono); font-size:11px; color:var(--muted); min-height:16px; margin-bottom:14px;"></div>
+
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-cancel" onclick="closeEsp32Modal()">CLOSE</button>
+    </div>
+  </div>
+</div>
 <script>
 // Clock 
 function updateClock() {
@@ -1114,6 +1187,129 @@ function runDebugScan() {
   });
 }
 
+// ── ESP32 Control ─────────────────────────────────────────
+async function sendEspCommand(value) {
+  if (!window.pywebview || !window.pywebview.api) {
+    log('ESP32 control not ready', 'err');
+    return;
+  }
+
+  // Disable all ESP buttons while command is in flight
+  document.querySelectorAll('.btn-esp').forEach(b => b.disabled = true);
+  const respEl = document.getElementById('esp-response');
+  respEl.textContent = `Sending command ${value}...`;
+  respEl.style.color = 'var(--accent)';
+
+  log(`ESP32 → sending command ${value}`, 'info');
+
+  try {
+    const result = await window.pywebview.api.send_esp_command(value);
+    if (result.ok) {
+      log(`ESP32 ← ${result.response}`, 'ok');
+      respEl.textContent = `✓ ${result.response}`;
+      respEl.style.color = 'var(--accent2)';
+    } else {
+      log(`ESP32 error: ${result.error}`, 'err');
+      respEl.textContent = `✗ ${result.error}`;
+      respEl.style.color = 'var(--err)';
+    }
+  } catch (e) {
+    log(`ESP32 error: ${e}`, 'err');
+    respEl.textContent = `✗ ${e}`;
+    respEl.style.color = 'var(--err)';
+  } finally {
+    document.querySelectorAll('.btn-esp').forEach(b => b.disabled = false);
+  }
+}
+
+// ── Digipot Submenu ───────────────────────────────────────
+function toggleDigipot() {
+  const menu = document.getElementById('digipot-submenu');
+  const visible = menu.style.display !== 'none';
+  menu.style.display = visible ? 'none' : 'block';
+  if (!visible) {
+    // Focus the input when opening
+    setTimeout(() => document.getElementById('digipot-value').focus(), 50);
+  }
+}
+
+async function sendDigipot() {
+  if (!window.pywebview || !window.pywebview.api) {
+    log('ESP32 control not ready', 'err');
+    return;
+  }
+
+  const input = document.getElementById('digipot-value');
+  let value = parseInt(input.value);
+
+  if (isNaN(value) || value < 0 || value > 255) {
+    log('Digipot: value must be between 0 and 255', 'err');
+    input.style.borderColor = 'var(--err)';
+    setTimeout(() => input.style.borderColor = 'var(--border)', 1500);
+    return;
+  }
+
+  // Send command 3 first to select digipot mode, then send the value
+  log(`Digipot → sending value ${value}`, 'info');
+
+  try {
+    const selectResult = await window.pywebview.api.send_esp_command(3);
+    if (!selectResult.ok) {
+      log(`Digipot select error: ${selectResult.error}`, 'err');
+      return;
+    }
+
+    const valueResult = await window.pywebview.api.send_esp_command(value);
+    if (valueResult.ok) {
+      log(`Digipot ← value ${value} set`, 'ok');
+      document.getElementById('esp-response').textContent = `✓ Digipot set to ${value}`;
+      document.getElementById('esp-response').style.color = 'var(--accent2)';
+      toggleDigipot();
+    } else {
+      log(`Digipot value error: ${valueResult.error}`, 'err');
+    }
+  } catch (e) {
+    log(`Digipot error: ${e}`, 'err');
+  }
+}
+
+// ── Laser Power Level ─────────────────────────────────────
+async function setPowerLevel() {
+  const pct = parseInt(document.getElementById('power-slider').value);
+  const digipotValue = Math.round(pct / 100 * 255);
+  log(`Laser power set to ${pct}% (digipot: ${digipotValue})`, 'info');
+
+  if (!window.pywebview || !window.pywebview.api) {
+    log('ESP32 not connected — power level saved locally only', 'warn');
+    return;
+  }
+  try {
+    const selectResult = await window.pywebview.api.send_esp_command(3);
+    if (!selectResult.ok) {
+      log(`Power set error: ${selectResult.error}`, 'err');
+      return;
+    }
+    const valueResult = await window.pywebview.api.send_esp_command(digipotValue);
+    if (valueResult.ok) {
+      log(`ESP32 confirmed power at ${pct}%`, 'ok');
+      document.getElementById('esp-response').textContent = `✓ Power set to ${pct}%`;
+      document.getElementById('esp-response').style.color = 'var(--accent2)';
+    } else {
+      log(`Power set failed: ${valueResult.error}`, 'err');
+    }
+  } catch (e) {
+    log(`Power set error: ${e}`, 'err');
+  }
+}
+
+function openEsp32Modal() {
+  document.getElementById('esp32-modal').classList.add('show');
+}
+
+function closeEsp32Modal() {
+  document.getElementById('esp32-modal').classList.remove('show');
+  document.getElementById('digipot-submenu').style.display = 'none';
+}
 </script>
 </body>
 </html>
