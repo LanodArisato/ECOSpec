@@ -13,83 +13,89 @@ LIB_DIR = Path(__file__).parent / "spectra/lib"
 DARK_FILE = Path(__file__).parent / "spectra/lib" / "dark.csv"
 
 def process_spectrum(filename, log_callback=print):
-    """
-    Preprocess a spectrum and compute Pearson r against library.
-    Returns:
-        best_match: material with highest Pearson r
-        best_r: Pearson correlation coefficient
-        top3: list of top 3 tuples (material_name, Pearson r)
-        x: wavenumber grid (numpy array)
-        y: final normalized intensity (numpy array)
-    """
     if log_callback:
         log_callback(f"Processing {filename}...")
 
-    # --- Load raw spectrum ---
-    df = pd.read_csv(RAW_DIR / filename, header=None, names=["WAVE", "INTENSITY"])
+    # --- Load and sum 40 2D frames ---
+    sum2D = None
+    count = 0
+    base_name = Path(filename).stem
 
-    # ---Cleanup ---
-    df = df.dropna()
-    df = df[(df["WAVE"] >= 200) & (df["WAVE"] <= 3400)]
+    for i in range(1, 41):
+        file_path = RAW_DIR / f"{base_name}_{i}.csv"
 
-    # --- Interpolation ---
-    x = np.arange(200, 3401, 1)
-    y_sample = np.interp(x, df["WAVE"], df["INTENSITY"])
+        if not file_path.exists():
+            continue
 
-    # --- Optional dark subtraction ---
+        M = pd.read_csv(file_path, header=None).values.astype(float)
+        M[np.isnan(M)] = 0
+
+        if sum2D is None:
+            sum2D = np.zeros_like(M, dtype=float)
+
+        if M.shape != sum2D.shape:
+            raise ValueError(f"Size mismatch in {file_path.name}")
+
+        sum2D += M
+        count += 1
+
+    # ✅ check AFTER loop
+    if count == 0:
+        raise FileNotFoundError(f"No spectra found for base name: {base_name}")
+
+    if log_callback:
+        log_callback(f"Summed {count} 2D frames")
+
+    # --- Dark subtraction (2D ONLY) ---
     if DARK_FILE.exists():
-        if log_callback:
-            log_callback(f"Dark file found: {DARK_FILE.name}, applying subtraction...")
+        dark2D = pd.read_csv(DARK_FILE, header=None).values.astype(float)
+        dark2D[np.isnan(dark2D)] = 0
 
-        dark_df = pd.read_csv(DARK_FILE, header=None, names=["WAVE", "INTENSITY"])
-        dark_df = dark_df.dropna()
+        if dark2D.shape != sum2D.shape:
+            raise ValueError("Dark frame size mismatch")
 
+        sum2D = sum2D - dark2D
 
-        # Interpolate dark spectrum
-        y_dark = np.interp(x, dark_df["WAVE"], dark_df["INTENSITY"])
+    # --- Collapse 2D → 1D ---
+    spec1D = np.sum(sum2D, axis=0)
 
-        # Subtract
-        y_dark_corrected = y_sample - y_dark
-        y_input = np.clip(y_dark_corrected, 0, None)
+    # --- Map pixel → wavelength ---
+    x_pixels = np.arange(len(spec1D))
+    x = np.arange(200, 3401, 1)
+    y_sample = np.interp(x, x_pixels, spec1D)
 
-    else:
-        y_input = y_sample
-        if log_callback:
-            log_callback("No dark file found, skipping dark subtraction.")
-    
+    # OPTIONAL (recommended)
+    # y_sample = y_sample / count
 
+    # ❌ REMOVE this entire second dark subtraction block
+    y_input = y_sample
+
+    # --- Processing pipeline ---
     df_proc = pd.DataFrame({"WAVE": x, "INTENSITY_RAW": y_input})
 
-    # --- Median filter ---
     df_proc["INTENSITY_MED"] = medfilt(df_proc["INTENSITY_RAW"], kernel_size=15)
 
-    # --- Polynomial baseline correction ---
     p = Polynomial.fit(df_proc["WAVE"], df_proc["INTENSITY_MED"], deg=7)
     baseline = p(df_proc["WAVE"])
     df_proc["INTENSITY_CORR"] = df_proc["INTENSITY_MED"] - baseline
 
-    # --- SNV normalization ---
     snv = (df_proc["INTENSITY_CORR"] - df_proc["INTENSITY_CORR"].mean()) / df_proc["INTENSITY_CORR"].std()
     df_proc["INTENSITY_SNV"] = snv
 
-    # --- Min-Max scaling ---
     scaler = MinMaxScaler()
     y = scaler.fit_transform(df_proc["INTENSITY_SNV"].values.reshape(-1, 1)).flatten()
 
-    # --- Save processed spectrum ---
+    # --- Save ---
     stem = Path(filename).stem
     df_proc.to_csv(PROCESSED_DIR / f"{stem}_processed.csv", index=False)
+
     if log_callback:
         log_callback(f"Processed spectrum saved as: {stem}_processed.csv")
 
-    # --- Load library ---
-    library_file = LIB_DIR / "lib.csv"
-    library_df = pd.read_csv(library_file, header=None)
-
-    # Material names from first row, ignoring first column
+    # --- Library matching ---
+    library_df = pd.read_csv(LIB_DIR / "lib.csv", header=None)
     material_names = [library_df.iloc[0, col] for col in range(1, library_df.shape[1], 2)]
 
-    # --- Pearson correlation matching ---
     best_match = None
     best_r = -np.inf
     scores = {}

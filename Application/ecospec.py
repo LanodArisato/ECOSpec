@@ -20,7 +20,6 @@ RAW_DIR    = os.path.join(BASE_DIR, 'processing', 'spectra', 'raw')
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-
 class EcoSpecAPI:
 
     def __init__(self):
