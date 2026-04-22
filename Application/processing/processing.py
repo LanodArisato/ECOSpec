@@ -39,7 +39,6 @@ def process_spectrum(filename, log_callback=print):
         sum2D += M
         count += 1
 
-    # ✅ check AFTER loop
     if count == 0:
         raise FileNotFoundError(f"No spectra found for base name: {base_name}")
 
@@ -56,18 +55,15 @@ def process_spectrum(filename, log_callback=print):
 
         sum2D = sum2D - dark2D
 
-    # --- Collapse 2D → 1D ---
+    # --- Collapse 2D -> 1D ---
     spec1D = np.sum(sum2D, axis=0)
 
-    # --- Map pixel → wavelength ---
+    # --- Map pixel -> wavelength ---
     x_pixels = np.arange(len(spec1D))
     x = np.arange(200, 3401, 1)
     y_sample = np.interp(x, x_pixels, spec1D)
 
-    # OPTIONAL (recommended)
-    # y_sample = y_sample / count
 
-    # ❌ REMOVE this entire second dark subtraction block
     y_input = y_sample
 
     # --- Processing pipeline ---
