@@ -16,63 +16,45 @@ def process_spectrum(filename, log_callback=print):
     if log_callback:
         log_callback(f"Processing {filename}...")
 
-    # --- Load and sum 40 2D frames ---
-    sum2D = None
-    count = 0
-    base_name = Path(filename).stem
+    # --- Load raw spectrum ---
+    df = pd.read_csv(RAW_DIR / filename)
 
-    for i in range(1, 41):
-        file_path = RAW_DIR / f"{base_name}_{i}.csv"
+    wavelength = df.iloc[:, 0].values.astype(float)
+    intensity = df.iloc[:, 1].values.astype(float)
 
-        if not file_path.exists():
-            continue
-
-        M = pd.read_csv(file_path, header=None).values.astype(float)
-        M[np.isnan(M)] = 0
-
-        if sum2D is None:
-            sum2D = np.zeros_like(M, dtype=float)
-
-        if M.shape != sum2D.shape:
-            raise ValueError(f"Size mismatch in {file_path.name}")
-
-        sum2D += M
-        count += 1
-
-    if count == 0:
-        raise FileNotFoundError(f"No spectra found for base name: {base_name}")
-
-    if log_callback:
-        log_callback(f"Summed {count} 2D frames")
-
-    # --- Dark subtraction (2D ONLY) ---
+    # --- Dark subtraction (BEFORE conversion) ---
     if DARK_FILE.exists():
-        dark2D = pd.read_csv(DARK_FILE, header=None).values.astype(float)
-        dark2D[np.isnan(dark2D)] = 0
+        dark_df = pd.read_csv(DARK_FILE)
 
-        if dark2D.shape != sum2D.shape:
-            raise ValueError("Dark frame size mismatch")
+        dark_wavelength = dark_df.iloc[:, 0].values.astype(float)
+        dark_intensity = dark_df.iloc[:, 1].values.astype(float)
 
-        sum2D = sum2D - dark2D
+        # Since you said same x-axis, enforce it
+        if not np.allclose(wavelength, dark_wavelength):
+            raise ValueError("Dark spectrum wavelength axis mismatch")
 
-    # --- Collapse 2D -> 1D ---
-    spec1D = np.sum(sum2D, axis=0)
+        intensity = intensity - dark_intensity
 
-    # --- Map pixel -> wavelength ---
-    x_pixels = np.arange(len(spec1D))
+
+    # --- Wavelength -> wavenumber (cm^-1) ---
+    wavenumber = 1e7 / wavelength
+
+    # Sort result
+    sort_idx = np.argsort(wavenumber)
+    wavenumber = wavenumber[sort_idx]
+    intensity = intensity[sort_idx]
+
+    # --- Interpolate ---
     x = np.arange(200, 3401, 1)
-    y_sample = np.interp(x, x_pixels, spec1D)
-
-
-    y_input = y_sample
+    y_interp = np.interp(x, wavenumber, intensity)
 
     # --- Processing pipeline ---
-    df_proc = pd.DataFrame({"WAVE": x, "INTENSITY_RAW": y_input})
+    df_proc = pd.DataFrame({"WAVENUMBER": x, "INTENSITY_RAW": y_interp})
 
     df_proc["INTENSITY_MED"] = medfilt(df_proc["INTENSITY_RAW"], kernel_size=15)
 
-    p = Polynomial.fit(df_proc["WAVE"], df_proc["INTENSITY_MED"], deg=7)
-    baseline = p(df_proc["WAVE"])
+    p = Polynomial.fit(df_proc["WAVENUMBER"], df_proc["INTENSITY_MED"], deg=7)
+    baseline = p(df_proc["WAVENUMBER"])
     df_proc["INTENSITY_CORR"] = df_proc["INTENSITY_MED"] - baseline
 
     snv = (df_proc["INTENSITY_CORR"] - df_proc["INTENSITY_CORR"].mean()) / df_proc["INTENSITY_CORR"].std()
