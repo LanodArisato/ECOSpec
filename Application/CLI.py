@@ -4,7 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from processing.processing import process_spectrum
 from hardware.espComms import send_servo_command
-from hardware.cameraControl import Camera
+from Application.hardware.spectrometer_control import Camera
 
 RAW_DIR = Path("preprocessing/spectra/raw")
 

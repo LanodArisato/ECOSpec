@@ -31,12 +31,17 @@ def process_spectrum(filename, log_callback=print):
         dark_wavelength = dark_df.iloc[:, 0].values.astype(float)
         dark_intensity = dark_df.iloc[:, 1].values.astype(float)
 
-        # Since you said same x-axis, enforce it
         if not np.allclose(wavelength, dark_wavelength):
             raise ValueError("Dark spectrum wavelength axis mismatch")
 
         intensity = intensity - dark_intensity
 
+
+    # --- Validate Data ---
+    valid = wavelength > 0
+
+    wavelength = wavelength[valid]
+    intensity = intensity[valid]
 
     # --- Wavelength ->Raman Shift (cm^-1) ---
     raman_shift = (1/LASER_WAVELENGTH - 1/wavelength) * 1e7
@@ -61,7 +66,7 @@ def process_spectrum(filename, log_callback=print):
 
     # --- ALS baseline (alternative) ---
     # y_med = df_proc["INTENSITY_MED"].values
-    
+
     # lam = 1e5
     # asym = 0.01
     # niter = 10

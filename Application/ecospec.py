@@ -8,8 +8,8 @@ import webview
 import os
 import sys
 import glob
-from hardware.cameraControl import Camera
-from hardware.espComms import espComms
+from hardware.spectrometer_control import Spectrometer
+from hardware.esp_comms import espComms
 from processing.processing import process_spectrum
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -40,18 +40,16 @@ class EcoSpecAPI:
         else:
             result['esp32'] = {'status': 'NOT FOUND', 'cls': 'warn', 'detail': None}
 
-        camera_found = False
+        spectrometer_found = False
         try:
-            cam = Camera()
-            camera_found = cam.init()
-            cam.reset()
+            spectrometer_found = Spectrometer().detect()
         except Exception:
-            camera_found = False
+            spectrometer_found = False
 
-        if camera_found:
-            result['camera'] = {'status': 'LINKED', 'cls': 'ok', 'detail': 'ACUROS CQD'}
+        if spectrometer_found:
+            result['spectrometer'] = {'status': 'LINKED', 'cls': 'ok', 'detail': 'QEPro'}
         else:
-            result['camera'] = {'status': 'NOT FOUND', 'cls': 'warn', 'detail': None}
+            result['spectrometer'] = {'status': 'NOT FOUND', 'cls': 'warn', 'detail': None}
 
         return result
 
@@ -76,23 +74,14 @@ class EcoSpecAPI:
                 return {'ok': False, 'error': 'ESP32 connection error'}
             self.esp.send_command(1)
 
-            cam = Camera()
-            cam.init()
-            cam.get_test_image()
-            cam.close()
+            with Spectrometer() as spectrometer:
+                scan_out = spectrometer.acquire_spectrum()
 
-            raw_files = sorted(
-                glob.glob(os.path.join(RAW_DIR, '*.csv')),
-                key=os.path.getmtime,
-                reverse=True
-            )
-            if not raw_files:
+            if not scan_out or not os.path.exists(scan_out):
                 return {'ok': False, 'error': 'No raw spectrum file found after capture'}
 
-            latest_file = os.path.basename(raw_files[0])
-
             best_match, best_r, top3, x, y = process_spectrum(
-                latest_file,
+                scan_out,
                 log_callback=None
             )
 
@@ -108,7 +97,7 @@ class EcoSpecAPI:
                 'match':    best_match,
                 'r':        round(float(best_r), 4),
                 'matches':  matches,
-                'file':     latest_file,
+                'file':     scan_out,
             }
 
         except Exception as e:
